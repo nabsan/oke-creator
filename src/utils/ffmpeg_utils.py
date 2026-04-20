@@ -5,6 +5,23 @@ from typing import Optional, Tuple
 from config import PITCH_TABLE
 
 
+def resolve_unique_path(path: Path) -> Path:
+    """
+    既存ファイルを上書きしないため、必要に応じて _v2, _v3... を付けたPathを返す。
+    """
+    if not path.exists():
+        return path
+
+    base = path.with_suffix("")
+    suffix = path.suffix
+    counter = 2
+    while True:
+        candidate = Path(f"{base}_v{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def build_ffmpeg_command(
     input_wav: Path,
     output_wav: Path,
@@ -37,7 +54,7 @@ def build_ffmpeg_command(
         '-i', str(input_wav),
         '-filter:a', audio_filter,
         '-ar', str(sample_rate),
-        '-y',
+        '-n',
         str(output_wav)
     ]
     return cmd
@@ -49,7 +66,7 @@ def apply_pitch_change(
     key_change: int,
     include_formant: bool = False,
     sample_rate: int = 44100
-) -> Tuple[bool, str]:
+) -> Tuple[bool, str, str]:
     """
     FFmpeg + rubberband で pitch 変更を実行
     
@@ -61,12 +78,11 @@ def apply_pitch_change(
         sample_rate: サンプルレート（デフォルト44100）
     
     Returns:
-        (成功時True、失敗時False, コマンド文字列)
+        (成功時True、失敗時False, コマンド文字列, ログ文字列)
     """
     try:
         if not input_wav.exists():
-            print(f"Input file not found: {input_wav}")
-            return False, ""
+            return False, "", f"Input file not found: {input_wav}"
         
         # コマンドを構築
         cmd = build_ffmpeg_command(input_wav, output_wav, key_change, include_formant, sample_rate)
@@ -80,14 +96,12 @@ def apply_pitch_change(
         )
         
         if result.returncode == 0:
-            return True, cmd_str
+            return True, cmd_str, build_process_log(result.stdout, result.stderr)
         else:
-            print(f"FFmpeg error: {result.stderr}")
-            return False, cmd_str
+            return False, cmd_str, build_process_log(result.stdout, result.stderr)
             
     except Exception as e:
-        print(f"Exception in apply_pitch_change: {e}")
-        return False, ""
+        return False, "", f"Exception in apply_pitch_change: {e}"
 
 
 def build_48k_command(
@@ -113,7 +127,7 @@ def build_48k_command(
         '-i', str(input_wav),
         '-ar', '48000',
         '-ac', '2',
-        '-y',
+        '-n',
     ]
     
     if key_change is not None and key_change != 0:
@@ -133,7 +147,7 @@ def convert_to_48k(
     output_wav: Path,
     key_change: Optional[int] = None,
     include_formant: bool = False
-) -> Tuple[bool, str]:
+) -> Tuple[bool, str, str]:
     """
     WAVを48kHzに変換（キー変更有無選択可）
     
@@ -144,12 +158,11 @@ def convert_to_48k(
         include_formant: フォルマント考慮
     
     Returns:
-        (成功時True、失敗時False, コマンド文字列)
+        (成功時True、失敗時False, コマンド文字列, ログ文字列)
     """
     try:
         if not input_wav.exists():
-            print(f"Input file not found: {input_wav}")
-            return False, ""
+            return False, "", f"Input file not found: {input_wav}"
         
         cmd = build_48k_command(input_wav, output_wav, key_change, include_formant)
         cmd_str = ' '.join(cmd)
@@ -162,11 +175,20 @@ def convert_to_48k(
         )
         
         if result.returncode == 0:
-            return True, cmd_str
+            return True, cmd_str, build_process_log(result.stdout, result.stderr)
         else:
-            print(f"FFmpeg error: {result.stderr}")
-            return False, cmd_str
+            return False, cmd_str, build_process_log(result.stdout, result.stderr)
             
     except Exception as e:
-        print(f"Exception in convert_to_48k: {e}")
-        return False, ""
+        return False, "", f"Exception in convert_to_48k: {e}"
+
+
+def build_process_log(stdout: str, stderr: str) -> str:
+    return "\n".join(
+        part
+        for part in [
+            "[stdout]\n" + stdout.strip() if stdout.strip() else "",
+            "[stderr]\n" + stderr.strip() if stderr.strip() else "",
+        ]
+        if part
+    )

@@ -1,171 +1,92 @@
-# oke-creator 🎤🎶  
-Demucs + FFmpeg による  
-**ボーカル分離／キー変更（テンポ維持・フォルマント考慮）ワークフロー**
+# Oke Creator
 
----
+Demucs + FFmpeg による、ボーカル分離とキー変更のための Streamlit アプリです。
 
-## 概要
-このリポジトリは、以下を目的とした **実験・実運用ログ兼レシピ集** です。
+- Demucs で `vocals.wav` / `no_vocals.wav` を生成
+- FFmpeg + rubberband でテンポを維持したままキー変更
+- ボーカル向けにフォルマント考慮を選択可能
+- 44.1kHz / 48kHz WAV 出力に対応
+- 同名の出力ファイルがある場合は上書きせず、`_v2`, `_v3` のように別名保存
 
-- iTunes / Apple Music 由来の **.m4a 音源**
-- **Demucs** によるボーカル分離（vocals / no_vocals）
-- **FFmpeg + rubberband** によるキー変更
-  - 半音単位（-1, -2, -3, …）
-  - テンポ維持
-  - フォルマント（声質）考慮
-- ダンス本番・口パク用途を想定した **48kHz WAV 出力**
+## 起動方法
 
----
+推奨は `run_app.bat` です。
 
-## 動作環境
-- OS: **Windows 10 / 11**
-- Python: **3.x（64bit）**
-- FFmpeg:  
-  - 配置先：  
-    ```
-    F:\tools\ffmpeg\bin
-    ```
-  - `ffmpeg.exe` が上記ディレクトリに存在
-  - 環境変数 `PATH` に `F:\tools\ffmpeg\bin` を追加済み
-
-確認：
 ```powershell
+cd S:\tools\codex\oke-creator
+.\run_app.bat
+```
+
+手動で起動する場合:
+
+```powershell
+cd S:\tools\codex\oke-creator
+.\.venv\Scripts\python.exe -m streamlit run .\src\app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+ブラウザで開く URL:
+
+```text
+http://127.0.0.1:8501
+```
+
+## 停止方法
+
+起動したターミナルで `Ctrl+C` を押します。
+
+バックグラウンドで残っている場合:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8501 -State Listen
+Stop-Process -Id <PID>
+```
+
+## パス設定
+
+入力フォルダと作業フォルダは、アプリのサイドバーから変更できます。
+
+起動時のデフォルト値は `.env` でも指定できます。`.env.example` をコピーして `.env` を作成してください。
+
+```powershell
+Copy-Item .\.env.example .\.env
+```
+
+設定例:
+
+```env
+OKE_DOWNLOADS_DIR=C:\Users\manab\Downloads
+OKE_WORK_DIR=C:\manabu\temp\htdemucs
+```
+
+`OKE_WORK_DIR` は Demucs の `htdemucs` 出力フォルダを指す想定です。別のベースフォルダを指定した場合は、その配下の `htdemucs` をアプリが参照します。
+
+## 前提
+
+- Windows 10 / 11
+- Python 仮想環境 `.venv`
+- FFmpeg が `PATH` から実行できること
+- Demucs が `.venv` にインストールされていること
+
+確認コマンド:
+
+```powershell
+.\.venv\Scripts\python.exe -m demucs --help
 ffmpeg -version
+```
 
+## テスト
 
-Python 仮想環境（venv）セットアップ
-1. venv 作成
-cd C:\manabu\develop\python3\oke-creator
-python -m venv .venv
+```powershell
+cd S:\tools\codex\oke-creator
+.\.venv\Scripts\python.exe -m unittest discover -s tests
+```
 
-2. venv 有効化（Windows）
-.venv\Scripts\activate
+## ドキュメント整理
 
+- `ReadMe.md`: 現在の入口。このファイルを優先して参照します。
+- `README2.md`: 既存の詳細ユーザーガイド。履歴込みの補足資料です。
+- `src/README.md`: 実装ファイル構成の補足です。
 
-プロンプトに (.venv) が付けばOK。
+## 注意
 
-必要ライブラリのインストール
-#pip install --upgrade pip
-python.exe -m pip install --upgrade pip 
-pip install demucs torchcodec
-
-
-確認：
-
-python -m demucs --help
-
-1. ボーカル分離（Demucs）
-Korean version
-python -m demucs --two-stems=vocals -o C:\manabu\temp ^
-"C:\Users\manab\Downloads\01 FeelSpecial.m4a"
-
-
-出力例：
-
-htdemucs/
-└─ 01 FeelSpecial/
-   ├─ vocals.wav
-   └─ no_vocals.wav
-
-2. ❌ NG例：asetrate によるキー変更（テンポが遅くなる）
-key -3（44.1kHz）
-ffmpeg -i "C:\manabu\temp\htdemucs\01 FeelSpecial\no_vocals.wav" ^
--filter:a "asetrate=44100*0.8409,aresample=44100" ^
-"C:\manabu\temp\htdemucs\01 FeelSpecial\karaoke_key-3.wav"
-
-key -3（48kHz）
-ffmpeg -i "C:\manabu\temp\htdemucs\01 FeelSpecial\no_vocals.wav" ^
--filter:a "asetrate=48000*0.8409,aresample=48000" ^
-"C:\manabu\temp\htdemucs\01 FeelSpecial\karaoke_key-3_48k.wav"
-
-
-❗ 問題点
-
-曲の長さが 3:25 → 約4:06
-
-テンポが遅くなり、ダンス用途に不適
-
-3. ✅ 正解：rubberband によるキー変更（テンポ維持）
-key -3（カラオケ）
-ffmpeg -i "C:\manabu\temp\htdemucs\01 FeelSpecial\no_vocals.wav" ^
--filter:a "rubberband=pitch=0.840896415" ^
-"C:\manabu\temp\htdemucs\01 FeelSpecial\karaoke_key-3_v2.wav"
-
-
-テンポ維持
-
-曲の長さは元と同じ
-
-4. Feel Special JP ver で再実施
-分離
-python -m demucs --two-stems=vocals -o C:\manabu\temp ^
-"C:\Users\manab\Downloads\03FeelSpecial-Jp ver-.m4a"
-
-key -3（カラオケ）
-ffmpeg -i "C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\no_vocals.wav" ^
--filter:a "rubberband=pitch=0.840896415" ^
-"C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\jp_karaoke_key-3_v2.wav"
-
-key -3（ボーカル：フォルマント考慮）
-ffmpeg -i "C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\vocals.wav" ^
--filter:a "rubberband=pitch=0.840896415:formant=1.0" ^
-"C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\vocals_jp_karaoke_key-3_v3.wav"
-
-原曲（m4a）も key -3
-ffmpeg -i "C:\Users\manab\Downloads\03FeelSpecial-Jp ver-.m4a" ^
--filter:a "rubberband=pitch=0.840896415" ^
--c:a aac -b:a 256k ^
-"C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\Feel_Special_key-3.m4a"
-
-5. key -1 に変更する場合
-カラオケ key -1
-ffmpeg -i "C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\no_vocals.wav" ^
--filter:a "rubberband=pitch=0.943874312" ^
-"C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\jp_karaoke_key-1_v3.wav"
-
-ボーカル key -1
-ffmpeg -i "C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\vocals.wav" ^
--filter:a "rubberband=pitch=0.943874312" ^
-"C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\jp_vocal_key-1_v3.wav"
-
-原曲 key -1（wav）
-ffmpeg -i "C:\Users\manab\Downloads\03FeelSpecial-Jp ver-.m4a" ^
--filter:a "rubberband=pitch=0.943874312" ^
-"C:\manabu\temp\htdemucs\03FeelSpecial-Jp ver-\jp_Feel_Special_key-1_orig.wav"
-
-6. 48kHz WAV で出力（本番・PA向け）
-ffmpeg -i input.wav ^
--filter:a "rubberband=pitch=0.943874312:formant=1.0" ^
--ar 48000 -ac 2 ^
-output_48k.wav
-
-7. 半音キー変更 早見表（超重要）
-半音	pitch倍率
--1	0.943874
--2	0.890899
--3	0.840896
--4	0.793701
-
-計算式：
-
-2^(n/12)
-
-8. ベストプラクティスまとめ
-
-❌ asetrate 単体 → テンポがズレる
-
-✅ rubberband → テンポ維持
-
-🎤 歌声あり → formant=1.0 を基本に微調整
-
-🎶 ダンス本番 → 48kHz WAV 推奨
-
-🧪 実験ログはそのまま再現可能な形で残す
-
-注意事項
-
-原曲の著作権・利用条件に注意
-
-本リポジトリは 技術検証・個人利用目的
-
-
+音源の著作権と利用条件に注意してください。このリポジトリは技術検証・個人利用を主目的としています。

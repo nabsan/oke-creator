@@ -1,5 +1,9 @@
 @echo off
-REM Oke Creator Web App 起動スクリプト
+setlocal
+
+REM Oke Creator Web App launcher
+
+cd /d "%~dp0"
 
 echo.
 echo ========================================
@@ -7,24 +11,26 @@ echo   Oke Creator - Web App Launch
 echo ========================================
 echo.
 
-REM 仮想環境を有効化
-if exist .venv\Scripts\activate.bat (
-    call .venv\Scripts\activate.bat
-    echo [OK] 仮想環境を有効化しました
-) else (
-    echo [ERROR] 仮想環境が見つかりません
-    echo venv を作成してください:
-    echo   python -m venv .venv
-    pause
-    exit /b 1
+set "PYTHON_EXE=%CD%\.venv\Scripts\python.exe"
+
+if not exist "%PYTHON_EXE%" (
+  echo [ERROR] Virtual environment was not found.
+  echo Create it first:
+  echo   python -m venv .venv
+  echo   .\.venv\Scripts\python.exe -m pip install --upgrade pip
+  echo   .\.venv\Scripts\python.exe -m pip install -r .\src\requirements.txt
+  pause
+  exit /b 1
 )
 
+echo [OK] Using Python:
+echo   %PYTHON_EXE%
 echo.
-echo Streamlitアプリを起動中...
-echo ブラウザで http://localhost:8501 を開いてください
+echo Starting Streamlit...
+echo Open this URL in your browser:
+echo   http://127.0.0.1:8501
 echo.
 
-REM Streamlitアプリ起動
-streamlit run src/app.py
+"%PYTHON_EXE%" -m streamlit run ".\src\app.py" --server.address 127.0.0.1 --server.port 8501
 
 pause

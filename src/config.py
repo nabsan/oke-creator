@@ -1,10 +1,31 @@
 """設定ファイル"""
+import os
 from pathlib import Path
-import math
+
+
+def _load_env_file() -> None:
+    """Load simple KEY=VALUE entries from the project-level .env file."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_env_file()
 
 # パス設定
-DOWNLOADS_DIR = Path(r"C:\Users\manab\Downloads")
-WORK_DIR = Path(r"C:\manabu\temp\htdemucs")
+DOWNLOADS_DIR = Path(os.environ.get("OKE_DOWNLOADS_DIR", r"C:\Users\manab\Downloads"))
+WORK_DIR = Path(os.environ.get("OKE_WORK_DIR", r"C:\manabu\temp\htdemucs"))
 
 # 半音キー変更の pitch 倍率計算
 def calculate_pitch_ratio(semitones: int) -> float:

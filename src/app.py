@@ -13,11 +13,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import DOWNLOADS_DIR, WORK_DIR, KEY_CHANGES, PITCH_TABLE
 from utils.audio_utils import (
     get_audio_files,
+    get_demucs_output_dir,
     get_separated_wavs,
     run_demucs_separation,
     get_song_directories
 )
-from utils.ffmpeg_utils import apply_pitch_change, convert_to_48k
+from utils.ffmpeg_utils import apply_pitch_change, convert_to_48k, resolve_unique_path
 
 
 # Streamlit設定
@@ -31,6 +32,35 @@ st.set_page_config(
 st.title("🎤 Oke Creator - ボーカル分離 & キー変更ツール")
 st.markdown("Demucs + FFmpeg による ボーカル分離・キー変更（テンポ維持・フォルマント考慮）")
 
+# パス設定
+with st.sidebar:
+    st.header("⚙️ 設定・情報")
+
+    st.subheader("📍 パス設定")
+    downloads_dir = Path(
+        st.text_input(
+            "入力フォルダ",
+            value=str(DOWNLOADS_DIR),
+            help=".mp3 / .m4a / .wav を探すフォルダ"
+        )
+    )
+    work_dir = Path(
+        st.text_input(
+            "作業・出力フォルダ",
+            value=str(WORK_DIR),
+            help="Demucs 分離結果と変換後 WAV の保存先"
+        )
+    )
+
+    if st.button("📁 作業フォルダを作成", key="create_work_dir"):
+        work_dir.mkdir(parents=True, exist_ok=True)
+        st.success(f"作業フォルダを作成しました: {work_dir}")
+
+    if not downloads_dir.exists():
+        st.warning(f"入力フォルダが存在しません: {downloads_dir}")
+    if not work_dir.exists():
+        st.warning(f"作業フォルダが存在しません: {work_dir}")
+
 # タブ構成
 tab1, tab2 = st.tabs(["ボーカル分離", "キー変更・48kHz変換"])
 
@@ -39,7 +69,7 @@ with tab1:
     st.header("📁 Step 1: ボーカル分離")
     
     # 音源ファイル選択
-    audio_files = get_audio_files()
+    audio_files = get_audio_files(downloads_dir)
     
     if audio_files:
         file_names = [f.name for f in audio_files]
@@ -57,22 +87,25 @@ with tab1:
         with col2:
             st.metric("ファイルサイズ", f"{selected_file.stat().st_size / (1024*1024):.1f} MB")
         with col3:
-            st.metric("保存先", str(WORK_DIR))
+            st.metric("保存先", str(work_dir))
         
         # Demucs実行
         if st.button("🚀 Demucs で分離を実行", key="run_demucs"):
             with st.spinner("ボーカル分離中... これには数分かかります"):
                 start_time = time.time()
-                success = run_demucs_separation(selected_file)
+                success, demucs_log = run_demucs_separation(selected_file, work_dir)
                 elapsed_time = time.time() - start_time
             
+            with st.expander("Demucs 実行ログ", expanded=not success):
+                st.code(demucs_log or "(ログなし)", language="text")
+
             if success:
                 st.success(f"✅ 分離完了！ ({elapsed_time:.1f}秒)")
-                st.info(f"📂 出力先: {WORK_DIR}")
+                st.info(f"📂 出力先: {work_dir}")
                 
                 # 分離結果を表示
                 song_name = selected_file.stem
-                separated_files = get_separated_wavs(song_name)
+                separated_files = get_separated_wavs(song_name, work_dir)
                 
                 if separated_files:
                     st.markdown("### 分離済みファイル:")
@@ -87,7 +120,7 @@ with tab1:
                 st.error("❌ Demucs実行中にエラーが発生しました。")
                 st.info("確認事項: demucsがインストールされているか確認してください")
     else:
-        st.warning(f"⚠️ {DOWNLOADS_DIR} に .mp3 または .m4a ファイルが見つかりません")
+        st.warning(f"⚠️ {downloads_dir} に .mp3 / .m4a / .wav ファイルが見つかりません")
 
 
 # ==================== Tab 2: キー変更・48kHz変換 ====================
@@ -95,7 +128,7 @@ with tab2:
     st.header("🎵 Step 2: キー変更・48kHz WAV変換")
     
     # 分離済み曲を取得
-    song_dirs = get_song_directories()
+    song_dirs = get_song_directories(work_dir)
     
     if song_dirs:
         selected_song = st.selectbox(
@@ -105,7 +138,7 @@ with tab2:
         )
         
         # 該当曲のWAVファイルを取得
-        separated_files = get_separated_wavs(selected_song)
+        separated_files = get_separated_wavs(selected_song, work_dir)
         
         if separated_files:
             st.markdown(f"### 📂 曲: `{selected_song}`")
@@ -126,8 +159,7 @@ with tab2:
             # 選択されたファイルを取得
             if selected_wav_type == 'original':
                 # 元ファイルを探す（ダウンロードフォルダから）
-                from config import DOWNLOADS_DIR
-                original_files = list(DOWNLOADS_DIR.glob('*'))
+                original_files = list(downloads_dir.glob('*'))
                 original_files = [f for f in original_files if f.suffix in ['.mp3', '.m4a', '.wav']]
                 # 曲名に基づいてフィルタリング
                 matching_files = [f for f in original_files if selected_song.lower() in f.name.lower()]
@@ -246,10 +278,13 @@ with tab2:
                     st.session_state.reset_filename_flag = True
                     st.rerun()
             
-            output_wav = WORK_DIR / selected_song / f"{output_filename}.wav"
+            requested_output_wav = get_demucs_output_dir(work_dir) / selected_song / f"{output_filename}.wav"
+            output_wav = resolve_unique_path(requested_output_wav)
             
             st.markdown(f"**📂 出力先:**")
             st.code(str(output_wav), language="text")
+            if output_wav != requested_output_wav:
+                st.warning(f"同名ファイルがあるため、上書きせず次の名前で保存します: {output_wav.name}")
             
             st.divider()
             
@@ -286,7 +321,7 @@ with tab2:
                 if output_format == "44.1kHz WAV":
                     with st.spinner("処理中..."):
                         start_time = time.time()
-                        success, cmd_log = apply_pitch_change(
+                        success, cmd_log, process_log = apply_pitch_change(
                             input_wav,
                             output_wav,
                             key_change,
@@ -297,7 +332,7 @@ with tab2:
                 else:
                     with st.spinner("処理中..."):
                         start_time = time.time()
-                        success, cmd_log = convert_to_48k(
+                        success, cmd_log, process_log = convert_to_48k(
                             input_wav,
                             output_wav,
                             key_change=key_change,
@@ -305,6 +340,9 @@ with tab2:
                         )
                         elapsed_time = time.time() - start_time
                 
+                with st.expander("FFmpeg 実行ログ", expanded=not success):
+                    st.code(process_log or "(ログなし)", language="text")
+
                 if success:
                     st.success(f"✅ 変換完了！ ({elapsed_time:.1f}秒)")
                     
@@ -318,17 +356,14 @@ with tab2:
         else:
             st.warning(f"⚠️ `{selected_song}` に分離済みファイルが見つかりません")
     else:
-        st.warning(f"⚠️ {WORK_DIR} に分離済みの曲が見つかりません")
+        st.warning(f"⚠️ {work_dir} に分離済みの曲が見つかりません")
         st.info("📌 まずは Tab 1 でボーカル分離を実行してください")
 
 
 # ==================== サイドバー ====================
 with st.sidebar:
-    st.header("⚙️ 設定・情報")
-    
-    st.subheader("📍 パス設定")
-    st.code(f"ダウンロード: {DOWNLOADS_DIR}", language="text")
-    st.code(f"作業フォルダ: {WORK_DIR}", language="text")
+    st.code(f"入力: {downloads_dir}", language="text")
+    st.code(f"作業: {work_dir}", language="text")
     
     st.divider()
     
@@ -340,7 +375,7 @@ with st.sidebar:
     
     import pandas as pd
     df = pd.DataFrame(pitch_data)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
     
     st.divider()
     

@@ -3,6 +3,8 @@
 **FFmpeg + Demucs によるボーカル分離・キー変更ツール**  
 テンポ維持、フォルマント考慮、48kHz対応の高機能Webアプリケーション
 
+> 現在の入口はリポジトリ直下の `ReadMe.md` です。このファイルは詳細ユーザーガイドとして残しています。
+
 ---
 
 ## 📋 目次
@@ -86,6 +88,30 @@ ffmpeg -version
 
 ## 起動方法
 
+### 推奨: venv の Python を明示して起動
+
+Demucs は仮想環境 `.venv` に入っているため、起動時は `.venv` の Python を明示して Streamlit を起動するのが安全です。
+
+```powershell
+cd S:\tools\codex\oke-creator
+.\.venv\Scripts\python.exe -m streamlit run .\src\app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+ブラウザで次を開きます。
+
+```text
+http://127.0.0.1:8501
+```
+
+`streamlit run src/app.py` だけで起動すると、環境によっては通常の Python が使われ、Demucs 実行時に次のエラーになることがあります。
+
+```text
+Demucs実行中にエラーが発生しました。
+確認事項: demucsがインストールされているか確認してください
+```
+
+この場合は `.venv` の Python で起動し直してください。
+
 ### 方法1: バッチファイルで起動（推奨）
 
 ```bash
@@ -104,6 +130,38 @@ streamlit run src/app.py
 
 ブラウザで http://localhost:8501 を開いてください。
 
+## 停止方法
+
+### ターミナルから起動した場合
+
+Streamlit を起動したターミナルで `Ctrl+C` を押します。
+
+### バックグラウンドで起動している場合
+
+8501番ポートを使っているプロセスを確認します。
+
+```powershell
+Get-NetTCPConnection -LocalPort 8501 -State Listen
+```
+
+表示された `OwningProcess` の PID を指定して停止します。
+
+```powershell
+Stop-Process -Id <PID>
+```
+
+例:
+
+```powershell
+Stop-Process -Id 42640
+```
+
+Python プロセスを確認したい場合:
+
+```powershell
+Get-Process python
+```
+
 ### Streamlit の初回起動
 
 初回起動時にメールアドレス入力を求められます：
@@ -121,7 +179,7 @@ streamlit run src/app.py
 #### 手順
 
 1. **ファイル選択**
-   - 「分離する音声ファイルを選択」から `C:\Users\manab\Downloads\` 配下の .mp3 または .m4a ファイルを選択
+   - サイドバーの入力フォルダ配下から .mp3 / .m4a / .wav ファイルを選択
    - ファイル情報（名前、サイズ、保存先）が表示されます
 
 2. **Demucs 実行**
@@ -131,7 +189,7 @@ streamlit run src/app.py
 
 3. **完了**
    - 分離完了時に成功メッセージが表示されます
-   - `C:\manabu\temp\htdemucs\曲名\` に以下が生成されます:
+   - サイドバーの作業フォルダ配下に以下が生成されます:
      - `vocals.wav` - ボーカルのみ
      - `no_vocals.wav` - ボーカル除外（カラオケ）
 
@@ -155,7 +213,7 @@ streamlit run src/app.py
 
 **1. 曲を選択**
 - 「処理する曲を選択（分離済みから）」で分離済みの曲を選択
-- `C:\manabu\temp\htdemucs\` 配下から自動検出されます
+- サイドバーの作業フォルダ配下から自動検出されます
 
 **2. 処理ファイルを選択**
 - ラジオボタンで以下から選択:
@@ -304,8 +362,9 @@ streamlit run src/app.py
 ### ❌ ファイルが見つからないエラー
 
 **確認:**
-- ダウンロードフォルダのパス: `C:\Users\manab\Downloads\`
-- 作業フォルダのパス: `C:\manabu\temp\htdemucs\`
+- サイドバーの入力フォルダのパス
+- サイドバーの作業フォルダのパス
+- `.env` の `OKE_DOWNLOADS_DIR` / `OKE_WORK_DIR`
 - パスが存在しない場合は手動で作成
 
 ### ❌ 「元ファイル（Original）」が検出されない
@@ -331,21 +390,25 @@ oke-creator/
 │       ├── __init__.py
 │       ├── audio_utils.py     # Demucs分離実行
 │       └── ffmpeg_utils.py    # FFmpeg実行
+├── .env.example               # ローカルパス設定の例
+├── tests/                     # ユニットテスト
 ├── run_app.bat                # アプリ起動バッチ
 ├── .venv/                     # Python仮想環境
-├── ReadMe.md                  # 技術ノート
+├── ReadMe.md                  # 現在の入口
 └── README2.md                 # このファイル（ユーザーガイド）
 ```
 
 ### 出力フォルダ
 
 ```
-C:\manabu\temp\htdemucs\
+[作業フォルダ]\htdemucs\
 └── 曲名/
     ├── vocals.wav             # ボーカル
     ├── no_vocals.wav          # カラオケ
     └── [処理済みWAV]          # キー変更後のファイル
 ```
+
+同名の処理済みWAVがある場合は上書きせず、`_v2`, `_v3` のように別名で保存します。
 
 ---
 

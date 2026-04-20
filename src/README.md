@@ -2,6 +2,8 @@
 
 FFmpeg + Demucs によるボーカル分離・キー変更ツールのWebアプリ版です。
 
+> 起動方法と現在の運用手順はリポジトリ直下の `ReadMe.md` を参照してください。
+
 ## 📋 機能
 
 - ✅ **ボーカル分離**: Demucsを使用してVocals / No Vocalに分離
@@ -108,8 +110,8 @@ src/
 パス、pitch倍率テーブル、キー選択肢を集中管理:
 
 ```python
-DOWNLOADS_DIR = Path(r"C:\Users\manab\Downloads")
-WORK_DIR = Path(r"C:\manabu\temp\htdemucs")
+DOWNLOADS_DIR = Path(os.environ.get("OKE_DOWNLOADS_DIR", r"C:\Users\manab\Downloads"))
+WORK_DIR = Path(os.environ.get("OKE_WORK_DIR", r"C:\manabu\temp\htdemucs"))
 
 PITCH_TABLE = {
     -3: 0.840896,
@@ -118,7 +120,7 @@ PITCH_TABLE = {
 }
 ```
 
-カスタマイズが必要な場合はこのファイルを編集してください。
+カスタマイズが必要な場合は、アプリのサイドバーまたはリポジトリ直下の `.env` で変更してください。
 
 ## 🔧 トラブルシューティング
 
